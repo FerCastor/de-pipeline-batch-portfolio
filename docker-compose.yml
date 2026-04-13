@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - Data Warehouse
+  postgres:
+    image: postgres:15-alpine
+    container_name: de_pipeline_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Metabase - Dashboard
+  metabase:
+    image: metabase/metabase:latest
+    container_name: de_pipeline_metabase
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+    ports:
+      - "3000:3000"
+    volumes:
+      - metabase_data:/metabase-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Airflow Postgres (metadata database)
+  airflow_db:
+    image: postgres:15-alpine
+    container_name: de_pipeline_airflow_db
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME}
+    volumes:
+      - airflow_db_data:/var/lib/postgresql/data
+
+  # Airflow Init (creates tables and admin user)
+  airflow_init:
+    image: apache/airflow:2.9.0
+    container_name: de_pipeline_airflow_init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@airflow_db/${AIRFLOW_DB_NAME}
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    depends_on:
+      - airflow_db
+    command: bash -c "airflow db init && airflow users create --username ${AIRFLOW_ADMIN_USER} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname Admin --lastname User --role Admin --email admin@example.com"
+
+  # Airflow Webserver
+  airflow_webserver:
+    image: apache/airflow:2.9.0
+    container_name: de_pipeline_airflow_webserver
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@airflow_db/${AIRFLOW_DB_NAME}
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./orchestration/dags:/opt/airflow/dags
+      - ./extract:/opt/airflow/extract
+    depends_on:
+      airflow_init:
+        condition: service_completed_successfully
+    command: webserver
+
+  # Airflow Scheduler
+  airflow_scheduler:
+    image: apache/airflow:2.9.0
+    container_name: de_pipeline_airflow_scheduler
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@airflow_db/${AIRFLOW_DB_NAME}
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./orchestration/dags:/opt/airflow/dags
+      - ./extract:/opt/airflow/extract
+    depends_on:
+      airflow_init:
+        condition: service_completed_successfully
+    command: scheduler
+
+volumes:
+  postgres_data:
+  metabase_data:
+  airflow_db_data:
