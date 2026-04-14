@@ -3,6 +3,8 @@
 def extract_from_kaggle(dataset):
     import kagglehub
     import os
+    import shutil
+    from pathlib import Path
 
     dataset_path = kagglehub.dataset_download(dataset)
     print(f"Dataset downloaded to: {dataset_path}")
@@ -13,6 +15,11 @@ def extract_from_kaggle(dataset):
 
     # Retorna o caminho completo do arquivo CSV
     csv_file = os.path.join(dataset_path, files[0])
+
+    # Cria pasta se não existir
+    # Path("data/bronze").mkdir(parents=True, exist_ok=True)
+ 
+    shutil.copy(csv_file, "/home/fernanda/Documentos/portfolio/de-pipeline-batch-portfolio/data/bronze/datatran.csv")
     return csv_file
 
 
