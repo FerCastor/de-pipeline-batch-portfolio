@@ -14,8 +14,8 @@ class PostgresLoader:
             connection = psycopg2.connect(
                 user=os.getenv("POSTGRES_USER"),
                 password=os.getenv("POSTGRES_PASSWORD"),
-                host="127.0.0.1",
-                port="5432",
+                host=os.getenv("POSTGRES_HOST"),
+                port=os.getenv("POSTGRES_PORT"),
                 database=os.getenv("POSTGRES_DB")
             )
             return connection
