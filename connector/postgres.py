@@ -64,12 +64,17 @@ class PostgresLoader:
         return dtype_mapping.get(str(pandas_dtype).lower(), 'VARCHAR(255)')
     
 
-    def create_table_if_not_exists(self, schema, table_name, columns):
+    def create_table_if_not_exists(self, schema, table_name, df):
         connection = self.connect_postgres()
         cursor = None
+        columns_list = []
         try:
             cursor = connection.cursor()
-            
+            for col in df.columns:
+                pg_type = self.get_postgres_type(df[col].dtype, col)
+                columns_list.append(f"{col} {pg_type}")
+            columns = ", ".join(columns_list)
+
             cursor.execute(f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = '{schema}' AND table_name = '{table_name}')")
             result = cursor.fetchone()
             if result[0]:
